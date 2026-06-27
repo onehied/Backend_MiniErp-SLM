@@ -1,0 +1,200 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String     @id @default(cuid())
+  username   String     @unique
+  email      String     @unique
+  passwordHash String   @map("password_hash")
+  avatarUrl  String?    @map("avatar_url")
+  phone      String?
+  googleId   String?    @unique @map("google_id")
+  googleEmail String?   @map("google_email")
+  googleName String?    @map("google_name")
+  googleAvatarUrl String? @map("google_avatar_url")
+  googleLinkedAt DateTime? @map("google_linked_at")
+  status     UserStatus @default(ACTIVE)
+  name       String
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  userRoles  UserRole[]
+  refreshTokens RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  activityLogs ActivityLog[] @relation("ActivityLogActor")
+
+  @@map("Users")
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  actorUserId String?  @map("actor_user_id")
+  action      String
+  module      String
+  entityType  String?  @map("entity_type")
+  entityId    String?  @map("entity_id")
+  status      String
+  message     String?
+  metadata    Json?    @db.JsonB
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  method      String?
+  path        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  actor       User?    @relation("ActivityLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([module, action])
+  @@index([entityType, entityId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model Role {
+  id          String     @id @default(cuid())
+  roleName    String     @unique @map("role_name")
+  description String?
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  userRoles   UserRole[]
+
+  @@map("Roles")
+}
+
+model UserRole {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  roleId     String   @map("role_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("User_Roles")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// Customer model for customer management
+model Customer {
+  id        String     @id @default(cuid())
+  name      String
+  email     String?    @unique
+  phone     String?
+  address   String?
+  city      String?
+  state      String?
+  zipCode   String?
+  country   String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relationship with Invoice
+  invoices  Invoice[]
+
+  @@map("customers")
+}
+
+// Invoice model
+model Invoice {
+  id              String           @id @default(cuid())
+  invoiceNumber   String           @unique
+  customerId      String
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  status          InvoiceStatus    @default(DRAFT)
+  issueDate       DateTime         @default(now())
+  dueDate         DateTime?
+  totalAmount     Float            @default(0)
+  taxAmount       Float            @default(0)
+  discount        Float            @default(0)
+  notes           String?
+  attachmentUrl   String?          @map("attachment_url")
+  attachmentName  String?          @map("attachment_name")
+  attachmentMimeType String?       @map("attachment_mime_type")
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relationship with InvoiceItem
+  items           InvoiceItem[]
+
+  @@map("invoices")
+  @@index([customerId])
+  @@index([status])
+}
+
+// InvoiceItem table
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  description String
+  quantity    Float
+  unitPrice   Float
+  amount      Float   @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("invoice_items")
+  @@index([invoiceId])
+}
+
+// Invoice Status Enum
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}

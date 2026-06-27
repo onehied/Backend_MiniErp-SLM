@@ -27,6 +27,11 @@ interface GoogleOAuthUser {
   avatarUrl?: string | null;
 }
 
+interface GoogleLinkStatePayload {
+  sub: string;
+  purpose: 'LINK_GOOGLE';
+}
+
 @Injectable()
 export class AuthService {
   //set password default login google oauth
@@ -48,6 +53,29 @@ export class AuthService {
     private activityLogsService: ActivityLogsService,
   ) {
     this.googleClient = new OAuth2Client();
+  }
+
+  private getGoogleOAuthClient() {
+    const clientId =
+      this.configService.get<string>('GOOGLE_CLIENT_ID')?.trim() ||
+      process.env.GOOGLE_CLIENT_ID?.trim() ||
+      '';
+    const clientSecret =
+      this.configService.get<string>('GOOGLE_CLIENT_SECRET')?.trim() ||
+      process.env.GOOGLE_CLIENT_SECRET?.trim() ||
+      '';
+    const callbackUrl =
+      this.configService.get<string>('GOOGLE_CALLBACK_URL')?.trim() ||
+      process.env.GOOGLE_CALLBACK_URL?.trim() ||
+      '';
+
+    if (!clientId || !clientSecret || !callbackUrl) {
+      throw new BadRequestException(
+        'Konfigurasi Google OAuth belum lengkap di backend.',
+      );
+    }
+
+    return new OAuth2Client(clientId, clientSecret, callbackUrl);
   }
 
   private async logAuthActivity(input: {
@@ -197,6 +225,34 @@ export class AuthService {
     return `${frontendUrl}/auth/callback?${searchParams.toString()}`;
   }
 
+  private async buildGoogleLinkState(userId: string) {
+    return this.jwtService.signAsync(
+      {
+        sub: userId,
+        purpose: 'LINK_GOOGLE',
+      } satisfies GoogleLinkStatePayload,
+      {
+        expiresIn: '10m',
+      },
+    );
+  }
+
+  private async verifyGoogleLinkState(state: string) {
+    try {
+      const payload = await this.jwtService.verifyAsync<GoogleLinkStatePayload>(
+        state,
+      );
+
+      if (payload.purpose !== 'LINK_GOOGLE' || !payload.sub) {
+        throw new UnauthorizedException('State Google link tidak valid.');
+      }
+
+      return payload.sub;
+    } catch {
+      throw new UnauthorizedException('State Google link tidak valid.');
+    }
+  }
+
   private async verifyGoogleIdToken(idToken: string): Promise<TokenPayload> {
     const clientId = this.getGoogleClientId();
 
@@ -233,6 +289,20 @@ export class AuthService {
     }
 
     return { clientId };
+  }
+
+  async getGoogleLinkAuthorizationUrl(userId: string) {
+    const googleClient = this.getGoogleOAuthClient();
+    const state = await this.buildGoogleLinkState(userId);
+
+    return {
+      authorizationUrl: googleClient.generateAuthUrl({
+        access_type: 'offline',
+        prompt: 'consent',
+        scope: ['openid', 'email', 'profile'],
+        state,
+      }),
+    };
   }
 
   async register(data: RegisterDto, context?: ActivityLogContext | null) {
@@ -415,9 +485,26 @@ export class AuthService {
   async linkGoogle(userId: string, idToken: string, context?: ActivityLogContext | null) {
     const payload = await this.verifyGoogleIdToken(idToken);
 
+    return this.linkGoogleAccount(
+      userId,
+      {
+        googleId: payload.sub,
+        email: payload.email || '',
+        name: payload.name || payload.email || 'Google User',
+        avatarUrl: payload.picture || null,
+      },
+      context,
+    );
+  }
+
+  private async linkGoogleAccount(
+    userId: string,
+    googleUser: GoogleOAuthUser,
+    context?: ActivityLogContext | null,
+  ) {
     const existingLink = await this.prisma.user.findFirst({
       where: {
-        googleId: payload.sub,
+        googleId: googleUser.googleId,
         id: { not: userId },
       },
     });
@@ -431,10 +518,10 @@ export class AuthService {
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: {
-        googleId: payload.sub,
-        googleEmail: payload.email,
-        googleName: payload.name,
-        googleAvatarUrl: payload.picture,
+        googleId: googleUser.googleId,
+        googleEmail: googleUser.email,
+        googleName: googleUser.name,
+        googleAvatarUrl: googleUser.avatarUrl,
         googleLinkedAt: new Date(),
       },
       include: this.userInclude,
@@ -445,7 +532,7 @@ export class AuthService {
       status: 'SUCCESS',
       message: 'Akun Google berhasil ditautkan.',
       entityId: user.id,
-      metadata: { email: user.email, googleId: payload.sub },
+      metadata: { email: user.email, googleId: googleUser.googleId },
       context: {
         ...context,
         actorUserId: user.id,
@@ -454,6 +541,32 @@ export class AuthService {
       },
     });
     return this.buildUserPayload(user);
+  }
+
+  async completeGoogleLink(
+    state: string,
+    googleUser: GoogleOAuthUser,
+    context?: ActivityLogContext | null,
+  ) {
+    try {
+      const userId = await this.verifyGoogleLinkState(state);
+      const linkedUser = await this.linkGoogleAccount(userId, googleUser, context);
+
+      return this.buildGoogleCallbackRedirectUrl({
+        mode: 'link_google',
+        status: 'success',
+        message: 'Akun Google berhasil ditautkan.',
+        google_name: linkedUser.googleName || '',
+        google_email: linkedUser.googleEmail || '',
+        google_avatar_url: linkedUser.googleAvatarUrl || '',
+      });
+    } catch (error: any) {
+      return this.buildGoogleCallbackRedirectUrl({
+        mode: 'link_google',
+        status: 'error',
+        message: error?.message || 'Tidak dapat menautkan akun Google.',
+      });
+    }
   }
 
   async unlinkGoogle(userId: string, context?: ActivityLogContext | null) {

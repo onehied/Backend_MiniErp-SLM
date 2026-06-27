@@ -110,6 +110,16 @@ export class AuthController {
     return this.authService.getGoogleClientConfig();
   }
 
+  @Post('google/link/start')
+  @UseGuards(JwtAuthGuard)
+  @ApiResponse({
+    status: 200,
+    description: 'Google account link authorization URL generated',
+  })
+  async startGoogleLink(@Req() req: any) {
+    return this.authService.getGoogleLinkAuthorizationUrl(req.user.id);
+  }
+
   @Get('google')
   @UseGuards(AuthGuard('google'))
   async googleAuth() {
@@ -119,6 +129,15 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   async googleAuthCallback(@Req() req: any, @Res() res: Response) {
+    if (typeof req.query?.state === 'string' && req.query.state.trim().length > 0) {
+      const redirectUrl = await this.authService.completeGoogleLink(
+        req.query.state,
+        req.user,
+        this.activityLogsService.getRequestContext(req),
+      );
+      return res.redirect(redirectUrl);
+    }
+
     const redirectUrl = await this.authService.buildGoogleLoginRedirect(req.user);
     return res.redirect(redirectUrl);
   }

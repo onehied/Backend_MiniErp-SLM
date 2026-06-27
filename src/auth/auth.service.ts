@@ -29,6 +29,7 @@ interface GoogleOAuthUser {
 
 @Injectable()
 export class AuthService {
+  private static readonly GOOGLE_DEFAULT_PASSWORD = 'password123';
   private readonly googleClient: OAuth2Client;
   private readonly userInclude = {
     userRoles: {
@@ -196,7 +197,7 @@ export class AuthService {
   }
 
   private async verifyGoogleIdToken(idToken: string): Promise<TokenPayload> {
-    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const clientId = this.getGoogleClientId();
 
     if (!clientId) {
       throw new BadRequestException('GOOGLE_CLIENT_ID is not configured');
@@ -213,6 +214,24 @@ export class AuthService {
     }
 
     return payload;
+  }
+
+  getGoogleClientId() {
+    return (
+      this.configService.get<string>('GOOGLE_CLIENT_ID')?.trim() ||
+      process.env.GOOGLE_CLIENT_ID?.trim() ||
+      ''
+    );
+  }
+
+  getGoogleClientConfig() {
+    const clientId = this.getGoogleClientId();
+
+    if (!clientId) {
+      throw new BadRequestException('GOOGLE_CLIENT_ID belum dikonfigurasi.');
+    }
+
+    return { clientId };
   }
 
   async register(data: RegisterDto, context?: ActivityLogContext | null) {
@@ -658,16 +677,17 @@ export class AuthService {
       counter += 1;
     }
 
-    // ubah menjadi default password
-    const randomPassword = await bcrypt.hash('password123', 10);
-    // const randomPassword = await bcrypt.hash(`${googleUser.googleId}:${Date.now()}`, 10);
+    const defaultGooglePasswordHash = await bcrypt.hash(
+      AuthService.GOOGLE_DEFAULT_PASSWORD,
+      10,
+    );
 
     const created = await this.prisma.user.create({
       data: {
         username,
         email: googleUser.email,
         name: googleUser.name,
-        passwordHash: randomPassword,
+        passwordHash: defaultGooglePasswordHash,
         avatarUrl: googleUser.avatarUrl || null,
         googleId: googleUser.googleId,
         googleEmail: googleUser.email,

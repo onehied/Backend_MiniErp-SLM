@@ -101,6 +101,15 @@ export class AuthController {
     );
   }
 
+  @Get('google/client-config')
+  @ApiResponse({
+    status: 200,
+    description: 'Google client configuration',
+  })
+  getGoogleClientConfig() {
+    return this.authService.getGoogleClientConfig();
+  }
+
   @Get('google')
   @UseGuards(AuthGuard('google'))
   async googleAuth() {

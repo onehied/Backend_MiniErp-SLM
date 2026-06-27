@@ -6,15 +6,23 @@ import { Strategy } from 'passport-google-oauth20';
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(private configService: ConfigService) {
+    const clientID =
+      configService.get<string>('GOOGLE_CLIENT_ID')?.trim() ||
+      process.env.GOOGLE_CLIENT_ID?.trim() ||
+      'missing-client-id';
+    const clientSecret =
+      configService.get<string>('GOOGLE_CLIENT_SECRET')?.trim() ||
+      process.env.GOOGLE_CLIENT_SECRET?.trim() ||
+      'missing-client-secret';
+    const callbackURL =
+      configService.get<string>('GOOGLE_CALLBACK_URL')?.trim() ||
+      process.env.GOOGLE_CALLBACK_URL?.trim() ||
+      'http://localhost:3000/api/auth/google/callback';
+
     super({
-      clientID:
-        configService.get<string>('GOOGLE_CLIENT_ID') || 'missing-client-id',
-      clientSecret:
-        configService.get<string>('GOOGLE_CLIENT_SECRET') ||
-        'missing-client-secret',
-      callbackURL:
-        configService.get<string>('GOOGLE_CALLBACK_URL') ||
-        'http://localhost:3000/api/auth/google/callback',
+      clientID,
+      clientSecret,
+      callbackURL,
       scope: ['email', 'profile'],
     });
   }

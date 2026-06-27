@@ -658,7 +658,9 @@ export class AuthService {
       counter += 1;
     }
 
-    const randomPassword = await bcrypt.hash(`${googleUser.googleId}:${Date.now()}`, 10);
+    // ubah menjadi default password
+    const randomPassword = await bcrypt.hash('password123', 10);
+    // const randomPassword = await bcrypt.hash(`${googleUser.googleId}:${Date.now()}`, 10);
 
     const created = await this.prisma.user.create({
       data: {

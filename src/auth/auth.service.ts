@@ -29,6 +29,7 @@ interface GoogleOAuthUser {
 
 @Injectable()
 export class AuthService {
+  //set password default login google oauth
   private static readonly GOOGLE_DEFAULT_PASSWORD = 'password123';
   private readonly googleClient: OAuth2Client;
   private readonly userInclude = {

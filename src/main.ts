@@ -14,9 +14,14 @@ async function bootstrap() {
     mkdirSync(uploadsPath, { recursive: true });
   }
 
-  // Enable CORS
+  // Enable CORS dengan environment variable
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
+    "http://localhost:3000",
+    "http://localhost:3001",
+  ];
+
   app.enableCors({
-    origin: ['http://localhost:3001', 'http://localhost:3000'],
+    origin: allowedOrigins,
     credentials: true,
   });
 

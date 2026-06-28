@@ -18,7 +18,12 @@
 ## 📖 API Documentation
 Swagger UI tersedia di:
   👉 https://backendminierp-slm-production.up.railway.app/api
-  
+
+## 🗄️ Database Schema / ERD
+![ERD Diagram](docs/mini_erp_erd.png)
+
+👉 Lihat detail di [docs/mini_erp_erd.png](docs/mini_erp_erd.png)
+
 ---
 
 ## ⚙️ Prerequisites and Installation Steps
